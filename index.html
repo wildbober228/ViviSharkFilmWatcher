@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07070a" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FilmWatcher" />
+    <meta name="description" content="Watch movies and browse together — with both cameras floating over the picture." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <title>FilmWatcher for ViviShark</title>
+  </head>
+  <body>
+    <!-- ============================================================ lobby -->
+    <main id="lobby">
+      <div class="lobby-card">
+        <div class="logo">
+          <img src="./icon.svg" alt="" width="36" height="36" />
+          <span>FilmWatcher <span class="logo-for">for ViviShark</span></span>
+        </div>
+        <h1 id="lobbyTitle">Movie night together, even across the ocean</h1>
+        <p id="lobbyText" class="muted">Share a browser tab or a movie from your computer while both cameras float right over the picture — even in fullscreen.</p>
+
+        <div id="hostLobby">
+          <button id="createBtn" class="btn primary big">Create a room</button>
+          <p id="roomHint" class="muted small"></p>
+          <details class="join-code">
+            <summary>I have a link or a code</summary>
+            <form id="codeForm" class="row">
+              <input id="codeInput" type="text" placeholder="Room code or link" autocomplete="off" autocapitalize="off" spellcheck="false" />
+              <button class="btn" type="submit">Join</button>
+            </form>
+          </details>
+        </div>
+
+        <div id="guestLobby" hidden>
+          <button id="joinBtn" class="btn primary big">Join the room</button>
+          <p class="muted small">Your browser will ask for camera and microphone access — tap “Allow”.</p>
+        </div>
+
+        <ul class="features">
+          <li><span>🎥</span>Cameras over the movie</li>
+          <li><span>🔊</span>Screen or file with sound</li>
+          <li><span>😱</span>Jump-scare reactions</li>
+        </ul>
+
+        <p id="iosTip" class="tip" hidden>
+          For true fullscreen on iPhone: <b>Share → Add to Home Screen</b>, then open the room from that icon.
+        </p>
+        <p id="lobbyError" class="error" hidden></p>
+      </div>
+    </main>
+
+    <!-- ============================================================ room -->
+    <section id="room" hidden>
+      <div id="stage">
+        <video id="main" playsinline></video>
+
+        <div id="notice" class="notice" hidden><div><span class="spinner"></span><p id="noticeText"></p></div></div>
+
+        <div id="partnerBubble" class="bubble partner" hidden>
+          <div id="partnerCam" class="cam off">
+            <video id="partnerVideo" playsinline autoplay></video>
+            <div class="cam-off"><span>camera is off</span></div>
+          </div>
+          <span id="partnerMicOff" class="badge" data-icon="micOff" hidden></span>
+        </div>
+
+        <div id="selfBubble" class="bubble self">
+          <div id="selfCam" class="cam">
+            <video id="selfVideo" playsinline autoplay muted></video>
+            <div class="cam-off"><span>your camera is off</span></div>
+          </div>
+        </div>
+
+        <div id="reactLayer" class="react-layer"></div>
+
+        <div id="invite" class="card" hidden>
+          <button id="inviteClose" class="icon-btn card-close" data-icon="close" aria-label="Close"></button>
+          <h2>Your room is ready</h2>
+          <p class="muted">Send this link to the other viewer. It never changes — save it and reuse it every time.</p>
+          <div class="link-row">
+            <input id="inviteLink" type="text" readonly />
+            <button id="copyBtn" class="btn" data-icon="copy">Copy</button>
+          </div>
+          <button id="shareLinkBtn" class="btn ghost wide" data-icon="send" hidden>Send…</button>
+          <ol class="steps">
+            <li><b>Float on top</b> — the other camera in a little window that stays above every window, even a fullscreen movie.</li>
+            <li><b>Screen</b> — pick a tab and keep “Share tab audio” switched on.</li>
+            <li><b>File</b> — a movie from your computer: best quality, with the cameras right inside the player.</li>
+          </ol>
+          <p class="muted small">Tip: headphones mean no echo.</p>
+        </div>
+
+        <div id="pipPrompt" class="card" hidden>
+          <h2>You're live ✓</h2>
+          <p class="muted">Open the other camera in a little window on top of the movie? Then just switch to the movie tab.</p>
+          <div class="row">
+            <button id="pipYes" class="btn primary" data-icon="pip">Open the window</button>
+            <button id="pipNo" class="btn ghost">No thanks</button>
+          </div>
+        </div>
+
+        <button id="soundUnlock" class="btn primary sound-unlock" data-icon="volume" hidden>Tap to turn the sound on</button>
+      </div>
+
+      <header id="hud">
+        <div class="pill status"><span id="statusDot" class="dot"></span><span id="statusText">…</span></div>
+        <div id="stats" class="pill stats" hidden></div>
+        <div class="hud-right">
+          <button id="inviteBtn" class="icon-btn host-only" data-icon="link" title="Invite link" aria-label="Invite link"></button>
+          <button id="statsBtn" class="icon-btn" data-icon="stats" title="Connection quality" aria-label="Connection quality"></button>
+          <button id="settingsBtn" class="icon-btn" data-icon="settings" title="Settings" aria-label="Settings"></button>
+        </div>
+      </header>
+
+      <footer id="controls">
+        <div id="fileBar" class="bar file-bar" hidden>
+          <button id="fpPlay" class="icon-btn" data-icon="pause" title="Play / pause (Space)" aria-label="Play or pause"></button>
+          <button id="fpBack" class="icon-btn" data-icon="back" title="Back 10 s (←)" aria-label="Back 10 seconds"></button>
+          <span id="fpTime" class="time host-only">0:00</span>
+          <input id="fpSeek" class="seek host-only" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek" />
+          <span id="fpDur" class="time host-only">0:00</span>
+          <button id="fpFwd" class="icon-btn" data-icon="fwd" title="Forward 10 s (→)" aria-label="Forward 10 seconds"></button>
+          <span class="vol-wrap host-only" data-icon="volume"><input id="fpVol" class="vol" type="range" min="0" max="1" step="0.01" value="1" aria-label="Movie volume" /></span>
+        </div>
+
+        <div class="bar-row">
+          <div class="bar">
+            <button id="micBtn" class="icon-btn" data-icon="mic" title="Microphone (M)" aria-label="Microphone"></button>
+            <button id="camBtn" class="icon-btn" data-icon="cam" title="Camera (V)" aria-label="Camera"></button>
+            <span class="sep host-only"></span>
+            <button id="shareBtn" class="icon-btn host-only" data-icon="share" title="Share a tab or your screen"><span class="lbl">Screen</span></button>
+            <button id="fileBtn" class="icon-btn host-only" data-icon="film" title="Play a movie from your computer"><span class="lbl">File</span></button>
+            <button id="modeBtn" class="icon-btn host-only" data-icon="movie" title="Movie — smooth motion, Browse — sharp text"><span class="lbl">Movie</span></button>
+            <button id="pipBtn" class="icon-btn host-only" data-icon="pip" title="Other camera on top of every window"><span class="lbl">Float on top</span></button>
+            <span class="sep"></span>
+            <button id="fitBtn" class="icon-btn" data-icon="fit" title="Fit / fill the screen" aria-label="Fit or fill"></button>
+            <button id="fsBtn" class="icon-btn" data-icon="expand" title="Fullscreen (F)" aria-label="Fullscreen"></button>
+          </div>
+          <div id="reactBar" class="bar reactions"></div>
+        </div>
+      </footer>
+    </section>
+
+    <div id="toasts" aria-live="polite"></div>
+
+    <dialog id="settings">
+      <form method="dialog" class="settings">
+        <h2>Settings</h2>
+        <label>Camera <select id="camSel"></select></label>
+        <label>Microphone <select id="micSel"></select></label>
+        <label class="host-only">Stream quality <select id="qualSel"></select></label>
+        <label class="check"><input id="selfChk" type="checkbox" /> Show my own camera</label>
+        <details>
+          <summary>Can't connect? (custom TURN server)</summary>
+          <p class="muted small">
+            Usually not needed. If the call never connects, get a free TURN server (e.g. from metered.ca) and paste its
+            credentials API link or a JSON list of iceServers here. Setting it up on one side is enough.
+          </p>
+          <textarea id="turnInput" rows="3" spellcheck="false" placeholder="https://<app>.metered.live/api/v1/turn/credentials?apiKey=…"></textarea>
+        </details>
+        <button id="newRoomBtn" type="button" class="btn ghost host-only">Make a new room link</button>
+        <div class="row end"><button class="btn primary" value="ok">Done</button></div>
+      </form>
+    </dialog>
+
+    <input id="fileInput" type="file" accept="video/*,.mkv,.webm,.mp4,.mov" hidden />
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

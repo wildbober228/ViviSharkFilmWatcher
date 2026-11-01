@@ -1,0 +1,13 @@
+{
+  "name": "FilmWatcher for ViviShark",
+  "short_name": "FilmWatcher",
+  "description": "Watch movies and browse together — with both cameras floating over the picture",
+  "display": "standalone",
+  "background_color": "#07070a",
+  "theme_color": "#07070a",
+  "icons": [
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
