@@ -1,7 +1,7 @@
 import './style.css';
 import { Bubble } from './bubble';
 import { paintIcons, setIcon } from './icons';
-import { Link, type LinkStatus, type Msg, type Role, type ScreenKind } from './link';
+import type { LinkStatus, Msg, Role, ScreenKind } from './link';
 import {
   LocalMedia,
   QUALITY,
@@ -12,8 +12,10 @@ import {
   type ViewMode,
 } from './media';
 import { REACTIONS, spawnReaction } from './reactions';
+import { ROUTES, ROUTE_CHOICES, checkRoutes, routesFor, type RouteChoice } from './routes';
 import { StatsMonitor } from './stats';
 import { newCode, parseCode, store } from './store';
+import { Switchboard } from './switchboard';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -42,6 +44,7 @@ const settingsDlg = $<HTMLDialogElement>('settings');
 const camSel = $<HTMLSelectElement>('camSel');
 const micSel = $<HTMLSelectElement>('micSel');
 const qualSel = $<HTMLSelectElement>('qualSel');
+const routeSel = $<HTMLSelectElement>('routeSel');
 const selfChk = $<HTMLInputElement>('selfChk');
 const turnInput = $<HTMLTextAreaElement>('turnInput');
 const fileInput = $<HTMLInputElement>('fileInput');
@@ -77,7 +80,9 @@ let role: Role = urlCode || (!canShareScreen && lastJoin) ? 'guest' : 'host';
 let code = role === 'guest' ? urlCode || lastJoin : store.get('hostCode') || newCode();
 
 let media: LocalMedia | null = null;
-let link: Link | null = null;
+let link: Switchboard | null = null;
+const savedRoute = store.get('route', 'auto') as RouteChoice;
+let routeChoice: RouteChoice = savedRoute in ROUTE_CHOICES ? savedRoute : 'auto';
 let status: LinkStatus = 'server';
 let statusDetail = '';
 let partnerStream: MediaStream | null = null;
@@ -86,6 +91,7 @@ const PARTNER_DEFAULT = { cam: true, mic: true, screen: false as ScreenKind | fa
 let partner = { ...PARTNER_DEFAULT };
 let screenKind: ScreenKind | null = null;
 let screenStream: MediaStream | null = null;
+let screenHeight = 0;
 let fileUrl = '';
 let seeking = false;
 let mode: ViewMode = store.get('mode') === 'browse' ? 'browse' : 'movie';
@@ -235,11 +241,24 @@ async function enterRoom(): Promise<void> {
   updateLayout();
   wake();
 
-  const ice = await loadIce();
-  link = new Link(role, code, () => media!.stream, linkEvents, ice);
-  link.setQuality(quality);
-  link.start();
+  await connect();
   void keepAwake();
+}
+
+/** (Re)start the connection with the routes picked in Settings; camera and movie keep running. */
+async function connect(): Promise<void> {
+  if (link) {
+    link.destroy();
+    link = null;
+    linkEvents.partner(null);
+    if (role === 'guest') linkEvents.screen(null);
+    linkEvents.status('server');
+  }
+  const ice = await loadIce();
+  link = new Switchboard(role, code, () => media!.stream, linkEvents, ice, routesFor(routeChoice));
+  link.setQuality(quality);
+  if (screenStream) link.setScreen(screenStream, screenHeight);
+  link.start();
 }
 
 async function loadIce(): Promise<RTCIceServer[]> {
@@ -318,7 +337,9 @@ function onMessage(m: Msg): void {
 // ---------------------------------------------------------------- rendering
 
 function renderStatus(): void {
-  $('statusText').textContent = statusDetail || STATUS_TEXT[role][status];
+  const via = link?.activeRoute;
+  $('statusText').textContent =
+    statusDetail || STATUS_TEXT[role][status] + (status === 'connected' && via ? ` · via ${ROUTES[via].label}` : '');
   const tone = { connected: 'ok', waiting: 'wait', connecting: 'wait', server: '', error: 'err' }[status];
   $('statusDot').className = `dot ${tone}`;
 }
@@ -545,6 +566,7 @@ fileInput.addEventListener('change', async () => {
 
 function setScreen(stream: MediaStream, kind: ScreenKind, sourceHeight: number): void {
   screenStream = stream;
+  screenHeight = sourceHeight;
   screenKind = kind;
   link?.setScreen(stream, sourceHeight);
   sendState();
@@ -847,12 +869,41 @@ soundUnlock.addEventListener('click', () => {
 
 // settings
 for (const [key, q] of Object.entries(QUALITY)) qualSel.add(new Option(q.label, key));
+for (const [key, label] of Object.entries(ROUTE_CHOICES)) routeSel.add(new Option(label, key));
 $('settingsBtn').addEventListener('click', () => {
   qualSel.value = quality;
+  routeSel.value = routeChoice;
   selfChk.checked = selfView;
   turnInput.value = store.get('turn');
   settingsDlg.showModal();
   void fillDevices();
+});
+routeSel.addEventListener('change', () => {
+  routeChoice = routeSel.value as RouteChoice;
+  store.set('route', routeChoice);
+  if (!link) return;
+  toast(`Reconnecting: ${ROUTE_CHOICES[routeChoice].split(' —')[0]}`);
+  void connect();
+});
+$('testBtn').addEventListener('click', async () => {
+  const button = $<HTMLButtonElement>('testBtn');
+  const list = $('testResults');
+  button.disabled = true;
+  button.textContent = 'Testing…';
+  list.replaceChildren();
+  try {
+    for (const { route, ok, total } of await checkRoutes()) {
+      const li = document.createElement('li');
+      li.className = ok ? 'ok' : 'bad';
+      li.textContent = `${ok ? '✓' : '✗'} ${ROUTES[route].label}: ${
+        total === 1 ? (ok ? 'reachable' : 'blocked') : `${ok} of ${total} servers reachable`
+      }`;
+      list.append(li);
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Test servers again';
+  }
 });
 camSel.addEventListener('change', () => void switchDevice('video', camSel.value));
 micSel.addEventListener('change', () => void switchDevice('audio', micSel.value));
@@ -870,7 +921,10 @@ settingsDlg.addEventListener('close', () => {
   const turn = turnInput.value.trim();
   if (turn !== store.get('turn')) {
     store.set('turn', turn);
-    toast('TURN saved — reload the page to apply it', 6000);
+    if (link) {
+      toast('TURN saved — reconnecting');
+      void connect();
+    }
   }
   wake();
 });

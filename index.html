@@ -157,6 +157,15 @@
         <label>Microphone <select id="micSel"></select></label>
         <label class="host-only">Stream quality <select id="qualSel"></select></label>
         <label class="check"><input id="selfChk" type="checkbox" /> Show my own camera</label>
+        <label>Connection server <select id="routeSel"></select></label>
+        <div class="route-test">
+          <button id="testBtn" type="button" class="btn ghost">Test servers</button>
+          <ul id="testResults" class="test-results"></ul>
+          <p class="muted small">
+            Shows which servers this device can reach. If PeerJS is blocked (e.g. in Russia without a VPN),
+            “Auto” connects through Nostr or MQTT instead. Keep “Auto” on both sides unless one route works better.
+          </p>
+        </div>
         <details>
           <summary>Can't connect? (custom TURN server)</summary>
           <p class="muted small">

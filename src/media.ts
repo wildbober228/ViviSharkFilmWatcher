@@ -228,6 +228,34 @@ export async function captureFromVideo(video: HTMLVideoElement): Promise<MediaSt
   return stream;
 }
 
+/** Bitrate caps: the movie gets the bandwidth, the camera bubbles stay light. */
+export function tuneSender(
+  sender: RTCRtpSender,
+  kind: 'cam' | 'screen',
+  quality: QualityKey,
+  sourceHeight: number,
+): void {
+  const track = sender.track;
+  if (!track) return;
+  const params = sender.getParameters();
+  const enc = params.encodings?.[0];
+  if (!enc) return;
+  if (kind === 'cam') {
+    if (track.kind !== 'video') return;
+    enc.maxBitrate = 700_000;
+    enc.maxFramerate = 24;
+  } else if (track.kind === 'video') {
+    const q = QUALITY[quality];
+    const height = track.getSettings().height || sourceHeight || q.height;
+    enc.maxBitrate = q.bitrate;
+    enc.maxFramerate = 30;
+    enc.scaleResolutionDownBy = Math.max(1, height / q.height);
+  } else {
+    enc.maxBitrate = 192_000;
+  }
+  sender.setParameters(params).catch((e) => console.warn('setParameters', e));
+}
+
 /** Ask for stereo, high-bitrate Opus so movie sound isn't squashed into a mono voice codec. */
 export function opusStereo(sdp: string): string {
   const pts = [...sdp.matchAll(/a=rtpmap:(\d+) opus\/48000\/2/gi)].map((m) => m[1]);

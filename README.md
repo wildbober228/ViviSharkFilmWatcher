@@ -17,6 +17,16 @@ Everything runs browser-to-browser (WebRTC via PeerJS). There's no backend; it's
 
 Camera windows can be dragged; double-tap to resize. Keyboard on desktop: Space play/pause, ←/→ 10 seconds, M mic, V camera, F fullscreen, 1–6 reactions.
 
+## Connection servers
+
+Devices find each other through public servers, then video goes directly between them. Settings → **Connection server**:
+
+- **Auto** (default): tries all routes at once and uses whichever connects first.
+- **PeerJS**: fastest, but its server sits behind Cloudflare, which is throttled in Russia without a VPN.
+- **Nostr relays** / **MQTT brokers**: public servers that are not behind Cloudflare. Offers are encrypted with the room code.
+
+**Test servers** shows which routes the current device can reach.
+
 ## Limitations
 
 - Netflix, Prime, Disney+ and other DRM services show a black screen when captured. YouTube, most sites and local files work.

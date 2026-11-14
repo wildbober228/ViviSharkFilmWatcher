@@ -1,5 +1,5 @@
 import { Peer, type DataConnection, type MediaConnection } from 'peerjs';
-import { QUALITY, opusStereo, type QualityKey } from './media';
+import { opusStereo, tuneSender, type QualityKey } from './media';
 
 export type Role = 'host' | 'guest';
 export type LinkStatus = 'server' | 'waiting' | 'connecting' | 'connected' | 'error';
@@ -9,7 +9,23 @@ export type Msg =
   | { t: 'state'; cam: boolean; mic: boolean; screen: ScreenKind | false; playing?: boolean }
   | { t: 'react'; e: string }
   | { t: 'ctl'; a: 'toggle-play' | 'back' | 'fwd' }
+  | { t: 'hello'; role: Role }
   | { t: 'bye' };
+
+/** One way of getting host and guest connected; the app talks to whichever one won. */
+export interface Link {
+  readonly connected: boolean;
+  start(): void;
+  send(msg: Msg): void;
+  /** Host: start, swap or stop what the guest sees. */
+  setScreen(stream: MediaStream | null, sourceHeight?: number): void;
+  setQuality(quality: QualityKey): void;
+  /** Swap the camera or mic after a device change. */
+  replaceTrack(track: MediaStreamTrack): void;
+  /** For the stats readout. */
+  activePc(): { pc: RTCPeerConnection; what: 'screen' | 'cam' } | null;
+  destroy(): void;
+}
 
 export interface LinkEvents {
   status(status: LinkStatus, detail?: string): void;
@@ -22,23 +38,17 @@ export interface LinkEvents {
 
 export const hostPeerId = (code: string) => `filmwatcher-${code}-host`;
 
-// PeerJS cloud defaults (incl. its public TURN relay); user-supplied TURN servers are appended.
-const DEFAULT_ICE: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  {
-    urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'],
-    username: 'peerjs',
-    credential: 'peerjsp',
-  },
-];
+// Public STUN only: PeerJS's own TURN hosts no longer resolve. User-supplied TURN servers are appended.
+export const DEFAULT_ICE: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 
 /**
- * One host, one guest. Three channels between them:
+ * PeerJS route: one host, one guest, signalled through the PeerJS cloud server (behind Cloudflare).
+ * Three channels between them:
  *  - data connection: state, reactions, playback control
  *  - "cam" call (guest → host): both cameras and mics
  *  - "screen" call (host → guest): the shared tab or local movie, one-way
  */
-export class Link {
+export class PeerJsLink implements Link {
   private peer?: Peer;
   private conn?: DataConnection;
   private pending?: DataConnection;
@@ -341,30 +351,9 @@ export class Link {
     });
   }
 
-  /** Bitrate caps: the movie gets the bandwidth, the camera bubbles stay light. */
   private tune(call: MediaConnection, kind: 'cam' | 'screen'): void {
-    const pc = call.peerConnection;
-    if (!pc) return;
-    for (const sender of pc.getSenders()) {
-      const track = sender.track;
-      if (!track) continue;
-      const params = sender.getParameters();
-      const enc = params.encodings?.[0];
-      if (!enc) continue;
-      if (kind === 'cam') {
-        if (track.kind !== 'video') continue;
-        enc.maxBitrate = 700_000;
-        enc.maxFramerate = 24;
-      } else if (track.kind === 'video') {
-        const q = QUALITY[this.quality];
-        const height = track.getSettings().height || this.screenHeight || q.height;
-        enc.maxBitrate = q.bitrate;
-        enc.maxFramerate = 30;
-        enc.scaleResolutionDownBy = Math.max(1, height / q.height);
-      } else {
-        enc.maxBitrate = 192_000;
-      }
-      sender.setParameters(params).catch((e) => console.warn('setParameters', e));
+    for (const sender of call.peerConnection?.getSenders() ?? []) {
+      tuneSender(sender, kind, this.quality, this.screenHeight);
     }
   }
 }

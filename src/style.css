@@ -1016,6 +1016,33 @@ dialog::backdrop {
   accent-color: var(--accent);
 }
 
+.route-test {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.route-test p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.test-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.test-results .ok {
+  color: var(--ok);
+}
+
+.test-results .bad {
+  color: #ff9296;
+}
+
 .settings details summary {
   cursor: pointer;
   font-size: 14px;
