@@ -12,6 +12,7 @@ import {
   type ViewMode,
 } from './media';
 import { REACTIONS, spawnReaction } from './reactions';
+import { RemoteControl, type RemoteCmd } from './remote';
 import { ROUTES, ROUTE_CHOICES, checkRoutes, routesFor, type RouteChoice } from './routes';
 import { StatsMonitor } from './stats';
 import { newCode, parseCode, store } from './store';
@@ -81,13 +82,19 @@ let code = role === 'guest' ? urlCode || lastJoin : store.get('hostCode') || new
 
 let media: LocalMedia | null = null;
 let link: Switchboard | null = null;
+const remote = new RemoteControl(() => {
+  renderRemoteStatus();
+  if (!link) return;
+  sendState();
+  updateLayout();
+});
 const savedRoute = store.get('route', 'auto') as RouteChoice;
 let routeChoice: RouteChoice = savedRoute in ROUTE_CHOICES ? savedRoute : 'auto';
 let status: LinkStatus = 'server';
 let statusDetail = '';
 let partnerStream: MediaStream | null = null;
 let remoteScreen: MediaStream | null = null;
-const PARTNER_DEFAULT = { cam: true, mic: true, screen: false as ScreenKind | false, playing: false };
+const PARTNER_DEFAULT = { cam: true, mic: true, screen: false as ScreenKind | false, playing: false, remote: false };
 let partner = { ...PARTNER_DEFAULT };
 let screenKind: ScreenKind | null = null;
 let screenStream: MediaStream | null = null;
@@ -312,14 +319,16 @@ function sendState(): void {
     cam: media.camOn,
     mic: media.micOn,
     screen: role === 'host' ? (screenKind ?? false) : false,
-    playing: screenKind === 'file' && !main.paused,
+    // A shared tab's state is only known once the Remote extension reports it; assume it's playing.
+    playing: screenKind === 'file' ? !main.paused : screenKind === 'share' && (remote.playing ?? true),
+    remote: role === 'host' && remote.available,
   });
 }
 
 function onMessage(m: Msg): void {
   switch (m.t) {
     case 'state':
-      partner = { cam: m.cam, mic: m.mic, screen: m.screen, playing: !!m.playing };
+      partner = { cam: m.cam, mic: m.mic, screen: m.screen, playing: !!m.playing, remote: !!m.remote };
       if (role === 'guest' && !m.screen && remoteScreen) linkEvents.screen(null);
       updateLayout();
       break;
@@ -327,11 +336,29 @@ function onMessage(m: Msg): void {
       react(m.e, false);
       break;
     case 'ctl':
-      if (role !== 'host' || screenKind !== 'file') break;
-      if (m.a === 'toggle-play') togglePlay();
-      else seekBy(m.a === 'back' ? -10 : 10);
+      if (role !== 'host') break;
+      if (m.a === 'toggle-play') togglePlay(true);
+      else seekBy(m.a === 'back' ? -10 : 10, true);
+      break;
+    case 'note':
+      toast(m.text, 6000);
       break;
   }
+}
+
+/** Guest: can the host's movie be paused from here (a file, or a shared tab with the Remote extension)? */
+const partnerControllable = () => partner.screen === 'file' || (partner.screen === 'share' && partner.remote);
+
+/** Host: play/pause/seek the shared tab through the Remote extension. */
+async function remoteCtl(cmd: RemoteCmd, fromPartner: boolean): Promise<void> {
+  const result = await remote.send(cmd);
+  if (result.ok) return sendState();
+  const why =
+    result.error === 'no-video'
+      ? 'no playing video found in your tabs'
+      : 'the Remote extension didn’t answer — reload the movie tab';
+  toast(`Couldn’t control the shared tab: ${why}`, 6000);
+  if (fromPartner) link?.send({ t: 'note', text: 'Couldn’t reach the video on the other side — ask them to check the movie tab.' });
 }
 
 // ---------------------------------------------------------------- rendering
@@ -358,6 +385,14 @@ function renderMediaButtons(): void {
     b.setAttribute('aria-label', on ? onLabel : offLabel);
   }
   selfCam.classList.toggle('off', !media.camOn);
+}
+
+function renderRemoteStatus(): void {
+  const el = $('remoteStatus');
+  el.classList.toggle('ok', remote.available);
+  el.textContent = remote.available
+    ? `✓ Remote extension ${remote.version} is on — the other side can pause and skip a shared tab.`
+    : 'To let the other side pause a shared tab (Screen mode), install the FilmWatcher Remote extension in this Chrome — see the README.';
 }
 
 function renderMode(): void {
@@ -398,7 +433,7 @@ function updateLayout(): void {
   notice.hidden = !text;
   notice.classList.toggle('busy', !connected);
 
-  const fileMode = role === 'host' ? screenKind === 'file' : hasMain && partner.screen === 'file';
+  const fileMode = role === 'host' ? screenKind === 'file' : hasMain && partnerControllable();
   fileBar.hidden = !fileMode;
   setIcon(btn.play, (role === 'host' ? !main.paused : partner.playing) ? 'pause' : 'play');
 
@@ -588,21 +623,23 @@ function stopScreen(notify = true): void {
   }
 }
 
-function togglePlay(): void {
+function togglePlay(fromPartner = false): void {
   if (role === 'guest') {
-    if (partner.screen === 'file') link?.send({ t: 'ctl', a: 'toggle-play' });
+    if (partnerControllable()) link?.send({ t: 'ctl', a: 'toggle-play' });
     return;
   }
+  if (screenKind === 'share' && remote.available) return void remoteCtl('toggle', fromPartner);
   if (screenKind !== 'file') return;
   if (main.paused) main.play().catch(() => {});
   else main.pause();
 }
 
-function seekBy(seconds: number): void {
+function seekBy(seconds: number, fromPartner = false): void {
   if (role === 'guest') {
-    if (partner.screen === 'file') link?.send({ t: 'ctl', a: seconds < 0 ? 'back' : 'fwd' });
+    if (partnerControllable()) link?.send({ t: 'ctl', a: seconds < 0 ? 'back' : 'fwd' });
     return;
   }
+  if (screenKind === 'share' && remote.available) return void remoteCtl(seconds < 0 ? 'back' : 'fwd', fromPartner);
   if (screenKind !== 'file' || !Number.isFinite(main.duration)) return;
   main.currentTime = clamp(main.currentTime + seconds, 0, main.duration);
 }
@@ -813,7 +850,7 @@ btn.mode.addEventListener('click', toggleMode);
 btn.pip.addEventListener('click', () => void togglePip());
 btn.fit.addEventListener('click', () => main.classList.toggle('cover'));
 btn.fs.addEventListener('click', toggleFullscreen);
-btn.play.addEventListener('click', togglePlay);
+btn.play.addEventListener('click', () => togglePlay());
 $('fpBack').addEventListener('click', () => seekBy(-10));
 $('fpFwd').addEventListener('click', () => seekBy(10));
 
@@ -961,3 +998,4 @@ window.addEventListener('pageshow', (e) => e.persisted && link && location.reloa
 paintIcons();
 setupLobby();
 renderFullscreen();
+renderRemoteStatus();

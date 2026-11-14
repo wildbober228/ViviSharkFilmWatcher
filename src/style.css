@@ -1043,6 +1043,15 @@ dialog::backdrop {
   color: #ff9296;
 }
 
+.remote-status {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.remote-status.ok {
+  color: var(--ok);
+}
+
 .settings details summary {
   cursor: pointer;
   font-size: 14px;

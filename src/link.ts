@@ -6,9 +6,18 @@ export type LinkStatus = 'server' | 'waiting' | 'connecting' | 'connected' | 'er
 export type ScreenKind = 'share' | 'file';
 
 export type Msg =
-  | { t: 'state'; cam: boolean; mic: boolean; screen: ScreenKind | false; playing?: boolean }
+  | {
+      t: 'state';
+      cam: boolean;
+      mic: boolean;
+      screen: ScreenKind | false;
+      playing?: boolean;
+      /** Host has the Remote extension, so a shared tab can be paused from the other side too. */
+      remote?: boolean;
+    }
   | { t: 'react'; e: string }
   | { t: 'ctl'; a: 'toggle-play' | 'back' | 'fwd' }
+  | { t: 'note'; text: string }
   | { t: 'hello'; role: Role }
   | { t: 'bye' };
 

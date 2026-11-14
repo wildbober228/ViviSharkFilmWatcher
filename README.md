@@ -17,6 +17,16 @@ Everything runs browser-to-browser (WebRTC via PeerJS). There's no backend; it's
 
 Camera windows can be dragged; double-tap to resize. Keyboard on desktop: Space play/pause, ←/→ 10 seconds, M mic, V camera, F fullscreen, 1–6 reactions.
 
+## Remote extension (pause from the other side in Screen mode)
+
+In **File** mode the watcher can already pause and skip ±10 s. For a shared tab (YouTube, movie sites) that needs the small Chrome extension in [`extension/`](extension), installed only on the computer that shares:
+
+1. Open `chrome://extensions` (or `edge://extensions`) and turn on **Developer mode**.
+2. **Load unpacked** → pick the `extension` folder.
+3. Reload the FilmWatcher tab and the movie tab.
+
+Settings in the room then shows "Remote extension … is on", and the watcher gets ⏯ ⏪ ⏩ while you share a tab. The extension finds the tab where a video last started playing (or one that's making sound) and controls its `<video>`; it ignores muted thumbnails and previews.
+
 ## Connection servers
 
 Devices find each other through public servers, then video goes directly between them. Settings → **Connection server**:
