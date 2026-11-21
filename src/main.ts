@@ -47,6 +47,12 @@ const micSel = $<HTMLSelectElement>('micSel');
 const qualSel = $<HTMLSelectElement>('qualSel');
 const routeSel = $<HTMLSelectElement>('routeSel');
 const selfChk = $<HTMLInputElement>('selfChk');
+const partnerChk = $<HTMLInputElement>('partnerChk');
+const chatBtn = $('chatBtn');
+const chatPanel = $('chatPanel');
+const chatMessages = $('chatMessages');
+const chatInput = $<HTMLInputElement>('chatInput');
+const chatSend = $<HTMLButtonElement>('chatSend');
 const turnInput = $<HTMLTextAreaElement>('turnInput');
 const fileInput = $<HTMLInputElement>('fileInput');
 const btn = {
@@ -105,6 +111,7 @@ let mode: ViewMode = store.get('mode') === 'browse' ? 'browse' : 'movie';
 let quality = store.get('quality', 'high') as QualityKey;
 if (!(quality in QUALITY)) quality = 'high';
 let selfView = store.get('selfView', '1') === '1';
+let hidePartner = store.get('hidePartner') === '1';
 let inviteDismissed = false;
 let inviteForced = false;
 let pipWin: Window | null = null;
@@ -291,6 +298,8 @@ const linkEvents = {
     else partner = { ...PARTNER_DEFAULT };
     renderStatus();
     updateLayout();
+    chatSend.disabled = s !== 'connected';
+    $('chatStatus').hidden = s === 'connected';
   },
   partner(stream: MediaStream | null) {
     partnerStream = stream;
@@ -334,6 +343,11 @@ function onMessage(m: Msg): void {
       break;
     case 'react':
       react(m.e, false);
+      break;
+    case 'chat':
+      if (typeof m.text === 'string' && m.text.length <= chatInput.maxLength && m.text.trim()) {
+        appendChat(m.text.trim(), false);
+      }
       break;
     case 'ctl':
       if (role !== 'host') break;
@@ -410,7 +424,7 @@ function updateLayout(): void {
   const hasMain = role === 'host' ? screenKind !== null : remoteScreen !== null;
   stage.classList.toggle('has-main', hasMain);
 
-  partnerBubbleEl.hidden = !connected || !!pipWin;
+  partnerBubbleEl.hidden = hidePartner || !connected || !!pipWin;
   partnerBubbleEl.classList.toggle('fill', !hasMain);
   partnerCam.classList.toggle('off', !partnerStream || !partner.cam);
   partnerCam.querySelector('.cam-off span')!.textContent = partnerStream ? 'camera is off' : 'connecting camera…';
@@ -444,9 +458,59 @@ function updateLayout(): void {
     btn.share.classList.toggle('active', sharing);
     btn.file.classList.toggle('active', screenKind === 'file');
     btn.pip.classList.toggle('active', !!pipWin);
+    btn.pip.hidden = hidePartner;
   }
   btn.fit.hidden = !hasMain;
 }
+
+// ---------------------------------------------------------------- room chat
+
+function appendChat(text: string, mine: boolean): void {
+  const atBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 24;
+  const message = document.createElement('p');
+  message.className = mine ? 'chat-message mine' : 'chat-message';
+  const sender = document.createElement('strong');
+  sender.textContent = mine ? 'You' : 'Other viewer';
+  message.append(sender, document.createTextNode(text));
+  chatMessages.append(message);
+  if (chatMessages.childElementCount > 300) chatMessages.firstElementChild?.remove();
+  if (mine || atBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
+  if (chatPanel.hidden && !mine) {
+    chatBtn.classList.add('unread');
+    chatBtn.setAttribute('aria-label', 'Chat, new messages');
+  }
+}
+
+function showChat(open: boolean): void {
+  chatPanel.hidden = !open;
+  chatBtn.setAttribute('aria-expanded', String(open));
+  chatBtn.classList.toggle('active', open);
+  if (open) {
+    chatBtn.classList.remove('unread');
+    chatBtn.setAttribute('aria-label', 'Chat');
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    $('chatClose').focus();
+  } else {
+    chatBtn.focus();
+  }
+  wake();
+}
+
+chatBtn.addEventListener('click', () => showChat(chatPanel.hasAttribute('hidden')));
+$('chatClose').addEventListener('click', () => showChat(false));
+chatPanel.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') showChat(false);
+  event.stopPropagation();
+});
+$('chatForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = chatInput.value.trim();
+  if (!text || text.length > chatInput.maxLength || !link?.connected) return;
+  link.send({ t: 'chat', text });
+  appendChat(text, true);
+  chatInput.value = '';
+  chatInput.focus();
+});
 
 // ---------------------------------------------------------------- reactions
 
@@ -570,7 +634,7 @@ async function toggleShare(): Promise<void> {
   main.muted = true;
   playSafe(main);
   setScreen(stream, 'share', video?.getSettings().height ?? 0);
-  if (!pipWin && 'documentPictureInPicture' in window) pipPrompt.hidden = false;
+  if (!hidePartner && !pipWin && 'documentPictureInPicture' in window) pipPrompt.hidden = false;
 }
 
 fileInput.addEventListener('change', async () => {
@@ -684,6 +748,7 @@ function toggleMode(): void {
 
 async function togglePip(): Promise<void> {
   pipPrompt.hidden = true;
+  if (hidePartner) return;
   if (pipWin) return pipWin.close();
   const dpip = (window as unknown as { documentPictureInPicture?: { requestWindow(o: object): Promise<Window> } })
     .documentPictureInPicture;
@@ -701,6 +766,7 @@ async function togglePip(): Promise<void> {
   } catch (e) {
     return toast('Couldn’t open the window: ' + errText(e));
   }
+  if (hidePartner) return win.close();
   pipWin = win;
   for (const sheet of Array.from(document.styleSheets)) {
     try {
@@ -774,6 +840,7 @@ function wake(): void {
 function goIdle(force: boolean): void {
   const busy =
     settingsDlg.open ||
+    !chatPanel.hidden ||
     !invite.hidden ||
     !pipPrompt.hidden ||
     !soundUnlock.hidden ||
@@ -911,6 +978,7 @@ $('settingsBtn').addEventListener('click', () => {
   qualSel.value = quality;
   routeSel.value = routeChoice;
   selfChk.checked = selfView;
+  partnerChk.checked = hidePartner;
   turnInput.value = store.get('turn');
   settingsDlg.showModal();
   void fillDevices();
@@ -952,6 +1020,18 @@ qualSel.addEventListener('change', () => {
 selfChk.addEventListener('change', () => {
   selfView = selfChk.checked;
   store.set('selfView', selfView ? '1' : '0');
+  updateLayout();
+});
+partnerChk.addEventListener('change', () => {
+  hidePartner = partnerChk.checked;
+  store.set('hidePartner', hidePartner ? '1' : '0');
+  if (hidePartner) {
+    pipPrompt.hidden = true;
+    pipWin?.close();
+    if (document.pictureInPictureElement === partnerVideo) {
+      void document.exitPictureInPicture().catch(() => {});
+    }
+  }
   updateLayout();
 });
 settingsDlg.addEventListener('close', () => {

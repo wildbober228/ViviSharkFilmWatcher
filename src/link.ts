@@ -16,6 +16,7 @@ export type Msg =
       remote?: boolean;
     }
   | { t: 'react'; e: string }
+  | { t: 'chat'; text: string }
   | { t: 'ctl'; a: 'toggle-play' | 'back' | 'fwd' }
   | { t: 'note'; text: string }
   | { t: 'hello'; role: Role }
@@ -53,7 +54,7 @@ export const DEFAULT_ICE: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:193
 /**
  * PeerJS route: one host, one guest, signalled through the PeerJS cloud server (behind Cloudflare).
  * Three channels between them:
- *  - data connection: state, reactions, playback control
+ *  - data connection: state, chat, reactions, playback control
  *  - "cam" call (guest → host): both cameras and mics
  *  - "screen" call (host → guest): the shared tab or local movie, one-way
  */
@@ -306,6 +307,7 @@ export class PeerJsLink implements Link {
 
   private wireConn(conn: DataConnection): void {
     conn.on('data', (data) => {
+      if (this.conn !== conn) return;
       const msg = data as Msg;
       if (msg?.t === 'bye') this.dropConn(conn);
       else if (msg?.t) this.ev.message(msg);

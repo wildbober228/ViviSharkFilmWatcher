@@ -113,11 +113,25 @@
         <div class="pill status"><span id="statusDot" class="dot"></span><span id="statusText">…</span></div>
         <div id="stats" class="pill stats" hidden></div>
         <div class="hud-right">
+          <button id="chatBtn" class="icon-btn" data-icon="chat" title="Chat" aria-label="Chat" aria-controls="chatPanel" aria-expanded="false"></button>
           <button id="inviteBtn" class="icon-btn host-only" data-icon="link" title="Invite link" aria-label="Invite link"></button>
           <button id="statsBtn" class="icon-btn" data-icon="stats" title="Connection quality" aria-label="Connection quality"></button>
           <button id="settingsBtn" class="icon-btn" data-icon="settings" title="Settings" aria-label="Settings"></button>
         </div>
       </header>
+
+      <section id="chatPanel" aria-labelledby="chatTitle" hidden>
+        <header class="chat-header">
+          <h2 id="chatTitle">Room chat</h2>
+          <button id="chatClose" class="icon-btn" data-icon="close" title="Close chat" aria-label="Close chat"></button>
+        </header>
+        <p id="chatStatus" class="muted small" role="status">Waiting for the other viewer…</p>
+        <div id="chatMessages" role="log" aria-label="Messages" tabindex="0"></div>
+        <form id="chatForm">
+          <input id="chatInput" type="text" aria-label="Message" placeholder="Write a message" maxlength="1000" autocomplete="off" />
+          <button id="chatSend" type="submit" class="btn primary" disabled>Send</button>
+        </form>
+      </section>
 
       <footer id="controls">
         <div id="fileBar" class="bar file-bar" hidden>
@@ -157,6 +171,7 @@
         <label>Microphone <select id="micSel"></select></label>
         <label class="host-only">Stream quality <select id="qualSel"></select></label>
         <label class="check"><input id="selfChk" type="checkbox" /> Show my own camera</label>
+        <label class="check"><input id="partnerChk" type="checkbox" /> Hide the other viewer’s camera</label>
         <label>Connection server <select id="routeSel"></select></label>
         <div class="route-test">
           <button id="testBtn" type="button" class="btn ghost">Test servers</button>

@@ -672,6 +672,92 @@ select option {
 
 /* ------------------------------------------------------------------ HUD & controls */
 
+.hud-right #chatBtn.unread {
+  position: relative;
+}
+
+#chatBtn.unread::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+#chatPanel {
+  position: absolute;
+  z-index: 19;
+  top: calc(60px + var(--safe-t));
+  right: calc(14px + var(--safe-r));
+  width: min(340px, calc(100% - 28px - var(--safe-l) - var(--safe-r)));
+  height: min(420px, calc(100% - 168px - var(--safe-t) - var(--safe-b)));
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.chat-header,
+#chatForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header {
+  justify-content: space-between;
+}
+
+.chat-header h2,
+#chatStatus {
+  margin: 0;
+}
+
+.chat-header h2 {
+  font-size: 16px;
+}
+
+#chatMessages {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-message {
+  width: fit-content;
+  max-width: 90%;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow-wrap: anywhere;
+}
+
+.chat-message.mine {
+  margin-left: auto;
+  background: rgba(229, 72, 77, 0.2);
+}
+
+.chat-message strong {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#chatInput {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+}
+
 #hud,
 #controls {
   position: absolute;
